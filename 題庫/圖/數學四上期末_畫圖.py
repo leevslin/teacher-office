@@ -15,7 +15,7 @@ PRE = '數學四上期末_'
 
 
 # 注意：排版工具會把每張圖縮成約 9.8 公分寬（B4 雙欄的一欄），
-# 字級要用「印出來約 9 pt 以上」來估：印出字級 ≈ 程式字級 × 3.9 ÷ 圖寬（英吋）。
+# 老師規定印出來最小 14 pt。字級要用「印出來 14 pt 以上」來估：印出字級 ≈ 程式字級 × 3.9 ÷ 圖寬（英吋）。
 def save(fig, name, tight=True):
     fig.savefig(os.path.join(OUT, PRE + name + '.png'), dpi=220, bbox_inches='tight' if tight else None,
                 pad_inches=0.08, facecolor='white')
@@ -28,7 +28,7 @@ def axis_off(ax):
 
 # ---------- 1. 分數數線：0～3，每 1 格是 1/6 ----------
 def fig_fraction_line():
-    fig, ax = plt.subplots(figsize=(9, 1.9))
+    fig, ax = plt.subplots(figsize=(6.0, 2.0))
     ax.plot([-0.08, 3.12], [0, 0], color='k', lw=1.6)
     ax.annotate('', xy=(3.2, 0), xytext=(3.1, 0), arrowprops=dict(arrowstyle='-|>', color='k', lw=1.6))
     for i in range(0, 19):
@@ -48,7 +48,7 @@ def fig_fraction_line():
 
 # ---------- 2. 小數數線：3～5，每 1 小格 0.1，箭頭在 4.3 ----------
 def fig_decimal_line():
-    fig, ax = plt.subplots(figsize=(9, 1.9))
+    fig, ax = plt.subplots(figsize=(6.0, 2.0))
     ax.plot([2.93, 5.1], [0, 0], color='k', lw=1.6)
     ax.annotate('', xy=(5.17, 0), xytext=(5.08, 0), arrowprops=dict(arrowstyle='-|>', color='k', lw=1.6))
     for i in range(30, 51):
@@ -59,7 +59,7 @@ def fig_decimal_line():
         if big:
             ax.text(x, -0.045, str(i // 10), ha='center', va='top', fontsize=24)
     ax.annotate('', xy=(4.3, 0.08), xytext=(4.3, 0.2), arrowprops=dict(arrowstyle='-|>', color='k', lw=1.4))
-    ax.text(4.3, 0.215, '柯南', ha='center', va='bottom', fontsize=22)
+    ax.text(4.3, 0.215, '柯南', ha='center', va='bottom', fontsize=24)
     ax.set_xlim(2.88, 5.22); ax.set_ylim(-0.16, 0.33)
     axis_off(ax)
     save(fig, '小數數線')
@@ -73,7 +73,7 @@ def fig_hundred_piece():
     cells = {(1, 2): '36', (0, 1): '45', (1, 1): '46', (2, 1): '47', (1, 0): '甲'}
     for (cx, cy), t in cells.items():
         ax.add_patch(Rectangle((cx, cy), 1, 1, fill=False, ec='k', lw=1.6))
-        ax.text(cx + 0.5, cy + 0.5, t, ha='center', va='center', fontsize=22)
+        ax.text(cx + 0.5, cy + 0.5, t, ha='center', va='center', fontsize=24)
     half = 3.1 * 6.0 / 2.6 / 2
     ax.set_xlim(1.5 - half, 1.5 + half); ax.set_ylim(-0.05, 3.05); ax.set_aspect('equal')
     axis_off(ax)
@@ -104,7 +104,7 @@ def fig_pattern():
     row2 = ['O', 'T', 'T', 'S', 'O', 'T', '?', 'S']   # 答：T（三角形）
     fig, ax = plt.subplots(figsize=(8.8, 3.0))
     for r, (row, y, tag) in enumerate(((row1, 1.6, '⑴'), (row2, 0, '⑵'))):
-        ax.text(-0.35, y + 0.5, tag, ha='center', va='center', fontsize=22)
+        ax.text(-0.35, y + 0.5, tag, ha='center', va='center', fontsize=34)
         for i, s in enumerate(row):
             ax.add_patch(Rectangle((i, y), 1, 1, fill=False, ec='k', lw=1.4 if s != '?' else 2.4))
             if s == '?':
@@ -120,47 +120,68 @@ def fig_pattern():
 
 # ---------- 5. 寄物櫃：4 列，號碼由上到下、再往右一行 ----------
 def fig_lockers():
-    rows, shown, cols = 4, 5, 7
-    fig, ax = plt.subplots(figsize=(6.4, 3.2))
+    # 畫成印出來的實際大小（約 3.9 吋寬），字級就是印出來的字級
+    rows, shown, cols = 4, 5, 6
+    fig, ax = plt.subplots(figsize=(3.9, 2.9))
     for c in range(cols):
-        ax.text(c + 0.5, rows + 0.12, '第%d行' % (c + 1), ha='center', va='bottom', fontsize=14.5)
+        ax.text(c + 0.5, rows + 0.08, '第
+%d
+行' % (c + 1), ha='center', va='bottom', fontsize=15,
+                linespacing=1.0)
         for r in range(rows):
             y = rows - 1 - r
-            ax.add_patch(Rectangle((c, y), 1, 1, fill=False, ec='k', lw=1.4))
+            ax.add_patch(Rectangle((c, y), 1, 1, fill=False, ec='k', lw=1.2))
             if c < shown:
-                ax.text(c + 0.5, y + 0.5, str(c * rows + r + 1), ha='center', va='center', fontsize=20)
+                ax.text(c + 0.5, y + 0.5, str(c * rows + r + 1), ha='center', va='center', fontsize=16)
     for r in range(rows):
-        ax.text(-0.12, rows - 1 - r + 0.5, '第%d列' % (r + 1), ha='right', va='center', fontsize=14.5)
-    ax.text(cols + 0.45, rows / 2, '……', ha='center', va='center', fontsize=20)
-    ax.set_xlim(-1.1, cols + 1.0); ax.set_ylim(-0.1, rows + 0.6); ax.set_aspect('equal')
+        ax.text(-0.1, rows - 1 - r + 0.5, '第%d列' % (r + 1), ha='right', va='center', fontsize=15)
+    ax.text(cols + 0.5, rows / 2, '…', ha='center', va='center', fontsize=16)
+    ax.set_xlim(-1.5, cols + 0.9); ax.set_ylim(-0.1, rows + 1.75); ax.set_aspect('equal')
     axis_off(ax)
     save(fig, '寄物櫃')
 
 
 # ---------- 6. 米花町地圖 ----------
 def fig_map():
-    # 座標單位＝英吋（圖寬 7.8 吋，插進 Word 約縮成一半）。路程標在線的正中間（白底蓋住線），不會看錯是哪一段。
-    P = {'毛利偵探\n事務所': (1.0, 3.3), '帝丹小學': (1.0, 1.4), '米花公園': (4.0, 3.3),
-         '阿笠博士家': (3.8, 0.35), '米花美術館': (6.85, 1.8)}
-    E = [('帝丹小學', '米花公園', '1 km 280 m'),
-         ('米花公園', '米花美術館', '865 m'),
-         ('帝丹小學', '阿笠博士家', '940 m'),
-         ('阿笠博士家', '米花美術館', '1 km 370 m'),
-         ('毛利偵探\n事務所', '帝丹小學', '650 m'),
-         ('毛利偵探\n事務所', '米花公園', '1 km 90 m')]
-    fig = plt.figure(figsize=(7.8, 4.0))
+    # 座標單位＝英吋，畫成印出來的大小（約 4 吋寬），字級 15.5 印出來約 14.5 pt。路程標在線的正中間（白底蓋住線）。
+    P = {'毛利偵探
+事務所': (0.4, 2.5), '帝丹
+小學': (0.4, 1.1), '米花
+公園': (2.45, 2.5),
+         '阿笠
+博士家': (2.0, 0.3), '米花
+美術館': (3.5, 1.3)}
+    E = [('帝丹
+小學', '米花
+公園', '1 km 280 m'),
+         ('米花
+公園', '米花
+美術館', '865 m'),
+         ('帝丹
+小學', '阿笠
+博士家', '940 m'),
+         ('阿笠
+博士家', '米花
+美術館', '1 km 370 m'),
+         ('毛利偵探
+事務所', '帝丹
+小學', '650 m'),
+         ('毛利偵探
+事務所', '米花
+公園', '1 km 90 m')]
+    fig = plt.figure(figsize=(4.15, 3.05))
     ax = fig.add_axes([0, 0, 1, 1])
     for a, b, t in E:
         (x1, y1), (x2, y2) = P[a], P[b]
-        ax.plot([x1, x2], [y1, y2], color='k', lw=1.8, zorder=1)
-        ax.text((x1 + x2) / 2, (y1 + y2) / 2, t, ha='center', va='center', fontsize=18, zorder=3,
-                bbox=dict(fc='white', ec='none', pad=2.0))
+        ax.plot([x1, x2], [y1, y2], color='k', lw=1.5, zorder=1)
+        ax.text((x1 + x2) / 2, (y1 + y2) / 2, t, ha='center', va='center', fontsize=15.5, zorder=3,
+                bbox=dict(fc='white', ec='none', pad=1.0))
     for name, (x, y) in P.items():
-        ax.text(x, y, name, ha='center', va='center', fontsize=18, zorder=4, linespacing=1.1,
-                bbox=dict(boxstyle='round,pad=0.3', fc='white', ec='k', lw=1.5))
-    ax.set_xlim(-0.1, 7.7); ax.set_ylim(0, 4.0); ax.set_aspect('equal')
+        ax.text(x, y, name, ha='center', va='center', fontsize=15.5, zorder=4, linespacing=1.05,
+                bbox=dict(boxstyle='round,pad=0.25', fc='white', ec='k', lw=1.3))
+    ax.set_xlim(-0.15, 4.0); ax.set_ylim(-0.1, 2.95); ax.set_aspect('equal')
     axis_off(ax)
-    save(fig, '米花町地圖')
+    save(fig, '米花町地圖', tight=False)
 
 
 if __name__ == '__main__':
