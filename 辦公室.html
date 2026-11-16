@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>教師辦公室</title>
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js", "three/addons/controls/OrbitControls.js": "./lib/OrbitControls.js" } }
+</script>
+<style>
+  :root {
+    --bg: #f6f3ec; --panel: #fffdf8; --ink: #23201b; --muted: #7b746a; --line: #e6dfd2;
+    --blue: #2f7de1; --amber: #e8930c; --green: #25a55f; --gray: #9aa0a6; --red: #c62828;
+    --beike: #8e6bbf; --chuti: #b47a45; --shenti: #2f6b55; --paiban: #c28a0c; --shuxue: #3f74c4;
+    --font: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: var(--font); }
+  button, select, textarea { font-family: inherit; }
+  #app { display: flex; height: 100vh; }
+  #stage { position: relative; flex: 1; min-width: 0; }
+  #three { position: absolute; inset: 0; }
+  #three canvas { display: block; }
+  #hud { position: absolute; left: 16px; top: 14px; pointer-events: none; max-width: 360px; }
+  #hud .title { display: inline-block; background: rgba(255,253,248,.88); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px 5px; backdrop-filter: blur(4px); }
+  #hud h1 { margin: 0; font-size: 21px; letter-spacing: 2px; }
+  #hud .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  #log { margin-top: 10px; background: rgba(255,253,248,.86); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; line-height: 1.55; backdrop-filter: blur(4px); }
+  #log b { font-weight: 600; }
+  #log .t { color: var(--muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
+  #log:empty { display: none; }
+  #nogl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted); padding: 40px; line-height: 1.8; }
+  #help3d { position: absolute; right: 12px; bottom: 10px; font-size: 12px; color: var(--muted); background: rgba(255,253,248,.8); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+
+  #panel { width: var(--pw, max(600px, 46vw)); max-width: calc(100vw - 260px); flex: none; display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid var(--line); min-height: 0; }
+  #split { width: 7px; flex: none; cursor: col-resize; background: var(--line); position: relative; }
+  #split:hover, #split.drag { background: #cdbfa8; }
+  #split::after { content: ""; position: absolute; left: 2px; top: 50%; width: 3px; height: 40px; margin-top: -20px; border-radius: 2px; background: rgba(0,0,0,.18); }
+  body.dragging { user-select: none; cursor: col-resize; }
+  body.dragging #three { pointer-events: none; }
+  #bigBtn { position: absolute; right: 12px; top: 12px; z-index: 5; }
+  #openChat { position: absolute; right: 12px; top: 12px; z-index: 6; box-shadow: 0 4px 14px rgba(0,0,0,.15); background: #6b5a8e; color: #fff; }
+  .closeBtn { border: 1.5px solid var(--line); background: #fff; border-radius: 10px; cursor: pointer; color: #6b6255; font-size: 15px; padding: 0; }
+  .closeBtn:hover { border-color: #cfc6b6; background: #f6f1e7; }
+  body.chatClosed #panel, body.chatClosed #split, body.chatClosed #bigBtn { display: none; }
+  #banner:empty { display: none; }
+  #banner { background: #fff4e5; border-bottom: 1px solid #f3d3a8; color: #8a4b00; font-size: 13px; padding: 8px 12px; line-height: 1.6; }
+  #banner .err { color: var(--red); }
+
+  #tabs { display: grid; grid-template-columns: repeat(var(--nstaff, 4), minmax(0, 1fr)) 56px 56px 34px; gap: 6px; padding: 10px 10px 8px; border-bottom: 1px solid var(--line); }
+  .stab { min-width: 0; border: 1.5px solid var(--line); background: #fff; border-radius: 10px; padding: 7px 6px 6px; cursor: pointer; text-align: left; position: relative; transition: border-color .15s, box-shadow .15s; }
+  .stab:hover { border-color: #cfc6b6; }
+  .stab.on { border-color: var(--c); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 22%, transparent); }
+  .stab .nm { font-weight: 700; font-size: 15px; }
+  .stab .rl { font-size: 12px; color: var(--muted); margin-left: 3px; }
+  .stab .st { font-size: 11.5px; margin-top: 3px; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; }
+  .stab .st span { overflow: hidden; text-overflow: ellipsis; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--gray); }
+  .dot.working { background: var(--blue); animation: pulse 1s infinite; }
+  .dot.waiting { background: var(--amber); }
+  .dot.done { background: var(--green); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .stab .bar { position: absolute; left: 0; right: 0; top: 0; height: 4px; border-radius: 10px 10px 0 0; background: var(--c); opacity: .85; }
+  .ftab { --c: #6b6255; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; }
+  .ftab .ic { font-size: 18px; line-height: 1; }
+
+  #chat, #files, #prog { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #prog { overflow-y: auto; padding: 10px 14px; }
+  #prog h3 { font-size: 15px; margin: 16px 0 6px; }
+  .prow { display: grid; grid-template-columns: 52px 1fr 1fr; gap: 6px; align-items: center; margin: 5px 0; }
+  .prow .cl { font-weight: 700; font-size: 15px; text-align: center; background: #f3ede2; border-radius: 8px; padding: 6px 0; }
+  .prow input { border: 1.5px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 14px; font-family: inherit; min-width: 0; }
+  .prow input:focus { border-color: #8e6bbf; outline: none; }
+  .prow .last { grid-column: 2 / 4; font-size: 12px; color: var(--muted); margin: -2px 0 2px 2px; }
+  .ptop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .ptop input[type=date] { border: 1.5px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 14px; font-family: inherit; }
+  .pacts { display: flex; gap: 8px; margin: 14px 0 6px; flex-wrap: wrap; }
+  .hist { font-size: 13px; line-height: 1.7; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 4px; }
+  .hist b { display: inline-block; min-width: 40px; }
+  .pcard { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 10px 0; background: #fff; }
+  .pcard.today { border-color: #c9b7e6; box-shadow: 0 0 0 2px #efe7fa; }
+  .phead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .phead .cl { font-weight: 800; font-size: 16px; padding: 2px 10px; border-radius: 8px; }
+  .phead .meta { color: var(--muted); font-size: 12.5px; }
+  .chip2 { font-size: 12.5px; font-weight: 700; border-radius: 10px; padding: 2px 9px; margin-left: auto; }
+  .chip2.late { background: #fdecec; color: var(--red); } .chip2.ok { background: #e5f6ec; color: #1d7a45; } .chip2.ahead { background: #eaf1fd; color: #2459a8; }
+  .bar2 { height: 6px; background: #eee6d8; border-radius: 4px; margin: 7px 0 4px; overflow: hidden; }
+  .bar2 i { display: block; height: 100%; background: #8e6bbf; border-radius: 4px; }
+  .sub { font-size: 12px; color: var(--muted); margin: 8px 0 2px; font-weight: 700; }
+  .sub.warn { color: var(--red); }
+  .ses { display: grid; grid-template-columns: 22px 1fr auto; gap: 4px 8px; align-items: start; padding: 6px 6px; border-radius: 8px; font-size: 13.5px; line-height: 1.55; }
+  .ses:hover { background: #faf6ef; }
+  .ses input[type=checkbox] { width: 18px; height: 18px; margin-top: 2px; accent-color: #8e6bbf; cursor: pointer; }
+  .ses .sm { font-size: 12px; color: var(--muted); }
+  .ses.done .ct { color: #8a8378; text-decoration: line-through; text-decoration-color: rgba(0,0,0,.25); }
+  .ses.late { background: #fff5f5; }
+  .ses .ed { border: 0; background: transparent; cursor: pointer; color: #9a8f80; font-size: 13px; }
+  .ses .dd { font-size: 12px; color: #1d7a45; white-space: nowrap; }
+  .edbox { grid-column: 1 / 4; display: grid; gap: 6px; background: #f8f4ec; border-radius: 8px; padding: 8px; }
+  .edbox textarea, .edbox input { font-family: inherit; font-size: 13.5px; border: 1.5px solid var(--line); border-radius: 7px; padding: 5px 8px; }
+  .edbox .r { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .pnote { width: 100%; margin-top: 6px; border: 1.5px dashed var(--line); border-radius: 8px; padding: 5px 9px; font-size: 13px; font-family: inherit; }
+  .more { border: 0; background: transparent; color: #6b5a8e; cursor: pointer; font-size: 12.5px; padding: 4px 0; }
+  #modal .box.xlbox { width: 96vw; max-width: 1500px; max-height: 92vh; padding: 12px 14px; }
+  .xtabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 2px solid #5a7d4f; margin-bottom: 0; }
+  .xtabs button { border: 1px solid #c9c9c9; border-bottom: 0; background: #eef0ea; padding: 6px 14px; font-size: 14px; cursor: pointer; border-radius: 6px 6px 0 0; font-family: inherit; }
+  .xtabs button.on { background: #5a7d4f; color: #fff; border-color: #5a7d4f; font-weight: 700; }
+  .xwrap { overflow: auto; max-height: calc(92vh - 150px); border: 1px solid #c9c9c9; border-top: 0; }
+  table.xl { border-collapse: collapse; width: 100%; font-size: 13.5px; background: #fff; }
+  table.xl th { position: sticky; top: 0; background: #e2efda; border: 1px solid #b7b7b7; padding: 6px 6px; font-weight: 700; z-index: 1; white-space: nowrap; }
+  table.xl td { border: 1px solid #d0d0d0; padding: 5px 6px; vertical-align: top; line-height: 1.5; }
+  table.xl td.c { text-align: center; white-space: nowrap; }
+  table.xl tr.exam td { background: #fff2cc; } table.xl tr.flex td { background: #ddebf7; }
+  table.xl tr.done td.st { background: #e2f0d9; color: #1d7a45; font-weight: 700; }
+  table.xl tr.late td.st { background: #f8cbad; color: #a33; font-weight: 700; }
+  table.xl tr.today td { box-shadow: inset 0 2px 0 #8e6bbf, inset 0 -2px 0 #8e6bbf; }
+  table.xl tr.done td.ct { color: #777; }
+  table.xl tr.foot td { background: #fce4d6; }
+  .xsum td.late { color: #a33; font-weight: 700; } .xsum td.ok { color: #1d7a45; font-weight: 700; }
+  .xhead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .xhead h3 { margin: 0; font-size: 17px; }
+  .legend span { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 12px; margin-right: 4px; border: 1px solid #ccc; }
+  .rbox { border: 2px solid #c9b7e6; background: #faf7ff; border-radius: 14px; padding: 12px 14px; margin: 10px 0 14px; }
+  .rrow { display: grid; grid-template-columns: 52px 1fr auto; gap: 6px; align-items: center; margin: 6px 0; }
+  .rrow .cl { font-weight: 800; text-align: center; border-radius: 8px; padding: 6px 0; font-size: 15px; }
+  .rrow input { border: 1.5px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 14px; font-family: inherit; min-width: 0; background: #fff; }
+  .rrow input:focus, .rbox textarea:focus { border-color: #8e6bbf; outline: none; }
+  .rrow .plan { grid-column: 2 / 4; font-size: 12px; color: var(--muted); margin: -3px 0 2px 2px; }
+  .rrow.off { opacity: .55; }
+  .rbox textarea { width: 100%; border: 1.5px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 14px; font-family: inherit; resize: vertical; min-height: 54px; }
+  .working { background: #eef4ff; color: #2b4f8a; border-radius: 10px; padding: 8px 12px; font-size: 13.5px; margin: 8px 0; display: flex; gap: 8px; align-items: center; }
+  .pbar { position: sticky; bottom: -10px; background: var(--panel); padding: 10px 0; border-top: 1px solid var(--line); display: flex; gap: 8px; flex-wrap: wrap; }
+  #atts { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+  #atts:empty { display: none; }
+  .att { display: inline-flex; align-items: center; gap: 4px; background: #f3ede2; border-radius: 8px; padding: 3px 4px 3px 9px; font-size: 12.5px; max-width: 260px; }
+  .att span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .att.up { opacity: .6; }
+  .att button { border: 0; background: transparent; cursor: pointer; color: #8a7f70; font-size: 13px; }
+  #clip { font-size: 17px; padding: 4px 10px; }
+  #chat.dropping { outline: 3px dashed #8e6bbf; outline-offset: -6px; }
+  #convBar { display: flex; gap: 6px; padding: 8px 10px; overflow-x: auto; border-bottom: 1px solid var(--line); align-items: center; flex: none; }
+  .conv { flex: none; border: 1px solid var(--line); background: #fff; border-radius: 16px; padding: 4px 6px 4px 11px; font-size: 12.5px; cursor: pointer; display: flex; align-items: center; gap: 4px; max-width: 170px; }
+  .conv span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conv.on { background: var(--c); color: #fff; border-color: var(--c); }
+  .conv .x { border: 0; background: transparent; color: inherit; opacity: .55; cursor: pointer; font-size: 13px; padding: 0 4px; border-radius: 8px; }
+  .conv .x:hover { opacity: 1; }
+  .conv .x.arm { background: var(--red); color: #fff; opacity: 1; }
+  .newc { flex: none; border: 1px dashed #bfb5a4; background: transparent; border-radius: 16px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; color: #5d554a; }
+  .newc:hover { background: #fff; }
+
+  #msgs { flex: 1; overflow-y: auto; padding: 12px 12px 6px; min-height: 0; }
+  .empty { color: var(--muted); font-size: 13.5px; line-height: 1.8; padding: 24px 10px; text-align: center; }
+  .m { margin: 7px 0; font-size: 15px; line-height: 1.7; }
+  .m.me { display: flex; justify-content: flex-end; }
+  .m.me .b { font-size: 15px; background: color-mix(in srgb, var(--c) 14%, #fff); border: 1px solid color-mix(in srgb, var(--c) 30%, #fff); border-radius: 12px 12px 3px 12px; padding: 7px 11px; max-width: 86%; white-space: pre-wrap; word-break: break-word; }
+  .m.text .b { background: #fff; border: 1px solid var(--line); border-radius: 12px 12px 12px 3px; padding: 8px 12px; max-width: 94%; word-break: break-word; }
+  .m.text .who { font-size: 11.5px; color: var(--muted); margin: 0 0 2px 4px; }
+  .m.tool { font-size: 12px; color: var(--muted); padding-left: 8px; display: flex; gap: 6px; }
+  .m.tool::before { content: "›"; color: var(--c); font-weight: 700; }
+  .m.sys { font-size: 12.5px; color: #8a5a00; background: #fff6e0; border-radius: 8px; padding: 5px 9px; }
+  .m.error { font-size: 13px; color: var(--red); background: #fdecec; border-radius: 8px; padding: 6px 10px; }
+  .m.done { text-align: center; font-size: 11.5px; color: var(--muted); margin: 10px 0; }
+  .m.done::before, .m.done::after { content: "——"; margin: 0 6px; opacity: .5; }
+  .m.handoff { border: 1.5px solid var(--hc); background: color-mix(in srgb, var(--hc) 7%, #fff); border-radius: 10px; padding: 8px 10px; font-size: 13.5px; }
+  .m.handoff .hd { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  .m.handoff .acts { margin-top: 7px; display: flex; gap: 6px; }
+  .tagline { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 6px; font-size: 13px; font-weight: 600; }
+  .tagline.ok { background: #e5f6ec; color: #1d7a45; }
+  .tagline.wait { background: #fff1d9; color: #9a5a00; }
+  .tagline.hand { background: #eaf1fd; color: #2459a8; }
+  .path { color: #2459a8; text-decoration: underline dotted; cursor: pointer; }
+  code { background: #f3efe6; padding: 0 4px; border-radius: 4px; font-size: 12.5px; }
+  .busy { font-size: 13px; color: var(--c); padding: 6px 4px; display: flex; align-items: center; gap: 8px; }
+  .busy i { width: 6px; height: 6px; border-radius: 50%; background: var(--c); animation: bob 1s infinite; display: inline-block; }
+  .busy i:nth-child(2) { animation-delay: .15s; } .busy i:nth-child(3) { animation-delay: .3s; }
+  @keyframes bob { 50% { transform: translateY(-4px); opacity: .4; } }
+
+  #ctxWarn { margin: 0 10px 6px; font-size: 12.5px; background: #eef4ff; color: #2b4f8a; border-radius: 8px; padding: 6px 10px; line-height: 1.5; }
+  #composer { border-top: 1px solid var(--line); padding: 8px 10px 10px; flex: none; }
+  #chips { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 6px; }
+  .chip { border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 2px 9px; font-size: 12px; cursor: pointer; color: #4a443b; }
+  .chip:hover { border-color: var(--c); color: var(--c); }
+  #input { width: 100%; resize: vertical; min-height: 96px; max-height: 40vh; border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 15px; line-height: 1.6; background: #fff; outline: none; }
+  #input:focus { border-color: var(--c); }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+  .row .hint { font-size: 11.5px; color: var(--muted); }
+  #sendHint { flex: 1; }
+  #contWrap { cursor: pointer; white-space: nowrap; }
+  #contWrap.on { color: #8a5a00; }
+  select { border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; font-size: 12.5px; background: #fff; }
+  .btn { border: 0; border-radius: 9px; padding: 7px 16px; font-size: 14px; cursor: pointer; font-weight: 600; }
+  .btn.pri { background: var(--c); color: #fff; }
+  .btn.pri:disabled { opacity: .45; cursor: default; }
+  .btn.ghost { background: #efeae0; color: #4a443b; }
+  .btn.sm { padding: 3px 10px; font-size: 12.5px; border-radius: 7px; }
+  .btn.danger { background: #fdecec; color: var(--red); }
+  #modelHint { font-size: 12px; color: #8a5a00; margin-top: 5px; }
+
+  #files { overflow-y: auto; padding: 10px 12px; }
+  #files h3 { font-size: 14px; margin: 14px 0 6px; display: flex; align-items: center; gap: 6px; }
+  #files h3 small { color: var(--muted); font-weight: 400; }
+  .frow { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 8px; font-size: 13px; }
+  .frow:hover { background: #f4efe4; }
+  .frow .fn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .frow .ft { color: var(--muted); font-size: 11.5px; flex: none; }
+  .frow .fa { display: none; gap: 4px; flex: none; }
+  .frow:hover .fa { display: flex; }
+  .fnote { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #2b2722; color: #fff; padding: 9px 16px; border-radius: 10px; font-size: 13.5px; max-width: 80vw; white-space: pre-wrap; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; line-height: 1.6; }
+  #toast.show { opacity: .96; }
+  #pop { position: fixed; z-index: 40; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.14); padding: 6px; display: none; flex-direction: column; gap: 4px; min-width: 150px; }
+  #pop .pt { font-size: 12px; color: var(--muted); padding: 2px 6px 4px; max-width: 280px; word-break: break-all; }
+  #pop button { text-align: left; }
+  #modal { position: fixed; inset: 0; background: rgba(30,25,20,.35); display: none; align-items: center; justify-content: center; z-index: 60; }
+  #modal .box { background: #fff; border-radius: 14px; padding: 16px 18px; width: min(560px, 92vw); max-height: 80vh; overflow: auto; }
+  #modal .box.wide { width: min(900px, 94vw); max-height: 88vh; }
+  .chalk { background: #2f5847; color: #f7f5ec; border-radius: 12px; padding: 16px 20px; font-family: "DFKai-SB", "標楷體", "BiauKai", serif; }
+  .chalk h2 { margin: 0 0 4px; font-size: 26px; }
+  .chalk .d { opacity: .75; font-size: 15px; margin-bottom: 10px; }
+  .chalk table { width: 100%; border-collapse: collapse; font-size: 17px; }
+  .chalk th { color: #ffe58a; text-align: left; border-bottom: 1px solid rgba(247,245,236,.5); padding: 6px 8px; }
+  .chalk td { padding: 7px 8px; border-bottom: 1px dashed rgba(247,245,236,.18); }
+  .chalk td.ok { color: #a6f0b5; } .chalk td.mid { color: #ffd27a; }
+  .notes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .note { width: 150px; min-height: 110px; padding: 18px 10px 10px; font-size: 14.5px; line-height: 1.55; color: #333; box-shadow: 0 3px 8px rgba(0,0,0,.25); position: relative; font-family: var(--font); }
+  .note::before { content: ""; position: absolute; top: 5px; left: 50%; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: #d33; }
+  .cprog { display: grid; grid-template-columns: 70px 1fr; gap: 6px 10px; font-size: 15px; margin-top: 8px; }
+  .cprog .c { font-weight: 700; text-align: center; border-radius: 7px; padding: 3px 0; }
+  .boardActs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  #boardBtn { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 5; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+  #modal pre { white-space: pre-wrap; font-family: var(--font); font-size: 13.5px; line-height: 1.7; background: #f8f5ee; padding: 10px 12px; border-radius: 8px; }
+
+  @media (max-width: 980px) {
+    #app { flex-direction: column; }
+    #stage { flex: none; height: 42vh; }
+    #panel { width: auto !important; max-width: none; flex: 1; border-left: 0; border-top: 1px solid var(--line); }
+    #split, #bigBtn { display: none; }
+    #log { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <section id="stage">
+    <div id="three"></div>
+    <div id="hud">
+      <div class="title"><h1>教師辦公室</h1><div class="sub" id="clock"></div></div>
+      <div id="log"></div>
+    </div>
+    <div id="help3d">拖曳旋轉・滾輪縮放・點人物叫他</div>
+    <div id="nogl" hidden></div>
+    <button class="btn ghost sm" id="bigBtn" title="把右邊的對話視窗放大或縮回">⤢ 對話放大</button>
+    <button class="btn ghost sm" id="boardBtn" title="打開公佈欄：進度表、各班進度、便條（也可以直接點 3D 裡的黑板）">📋 公佈欄</button>
+    <button class="btn" id="openChat" hidden>💬 打開對話</button>
+  </section>
+  <div id="split" title="拖曳調整對話視窗寬度（點兩下恢復）"></div>
+  <aside id="panel">
+    <div id="banner"></div>
+    <nav id="tabs"></nav>
+    <div id="chat">
+      <div id="convBar"></div>
+      <div id="msgs"></div>
+      <div id="ctxWarn" hidden></div>
+      <div id="composer">
+        <div id="chips"></div>
+        <div id="atts"></div>
+        <textarea id="input" placeholder="跟員工說要做什麼……（可以把檔案拖進來，或直接貼上截圖）"></textarea>
+        <div class="row">
+          <button class="btn ghost" id="clip" title="附加檔案（照片、PDF、Word、Excel……）">📎</button>
+          <input type="file" id="fileIn" multiple hidden>
+          <select id="model" title="這位員工用的模型"></select>
+          <label class="hint" id="contWrap" title="打勾：接著這段對話聊（員工記得前面講過的，但每句話都會把前面全部重送一次，比較耗額度）。&#10;不打勾：開一段新對話（員工從檔案找資料，比較省）。"><input type="checkbox" id="cont" style="vertical-align:-2px;accent-color:#8e6bbf"> 接著這段聊</label>
+          <span class="hint" id="sendHint">Ctrl + Enter 送出</span>
+          <button class="btn danger" id="stop" hidden>停止</button>
+          <button class="btn pri" id="send">送出</button>
+        </div>
+        <div id="modelHint" hidden></div>
+      </div>
+    </div>
+    <div id="files" hidden></div>
+    <div id="prog" hidden></div>
+  </aside>
+</div>
+<div id="toast"></div>
+<div id="pop"></div>
+<div id="modal"><div class="box"><div id="modalBody"></div><div style="text-align:right;margin-top:10px"><button class="btn ghost" id="modalClose">關閉</button></div></div></div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const STATUS_TEXT = { idle: '閒著', working: '工作中', waiting: '等你確認', done: '做完了' };
+const CHIPS = {
+  beike: ['幫我備五上 3-1 的課，先讀課本 PDF', '整理五上第 3 單元重點給珍奶', '整理六上第 3 單元重點給珍奶', '排期中到期末的各班進度'],
+  chuti: ['出五上期末考（第 3～4 單元）', '照 5 點審查意見改六上第 3 單元學習單', '出六上期末考（第 3～4 單元）', '出一題讀地圖的素養題組'],
+  shenti: ['審 題庫/ 裡最新的那份', '抽查這份卷子的課本頁碼', '段考卷最後總檢查'],
+  paiban: ['把 題庫/ 裡最新的那份排成 Word', '這份考卷壓到 2 頁', '把教案排成 Word'],
+  shuxue: ['出四上數學期末考（第 6～10 單元）', '出第 6 單元分數的小考', '照審題意見改數學考卷', '填這份數學考卷的雙向細目表'],
+};
+const PATH_RE = /((?:題庫|備課|審題紀錄|成品|收件匣|教學進度|教材|範例)\/[^\s，。、；：）)」』`*]+)/g;
+
+let S = null, V = 0, BOARD = null, cur = 'beike', tab = 'chat', office = null, lastRenderKey = '', serverDown = false;
+const drafts = {};
+let handled = {};
+try { cur = localStorage.getItem('office.cur') || 'beike'; handled = JSON.parse(localStorage.getItem('office.handled') || '{}'); } catch (e) {}
+
+function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), ms); }
+function modal(html) { $('#modalBody').innerHTML = html; $('#modal').style.display = 'flex'; }
+$('#modalClose').onclick = () => { $('#modal').style.display = 'none'; $('#modal .box').classList.remove('wide', 'xlbox'); };
+$('#modal').onclick = e => { if (e.target.id === 'modal') { $('#modal').style.display = 'none'; $('#modal .box').classList.remove('wide', 'xlbox'); } };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#modal').style.display === 'flex') $('#modalClose').click(); });
+
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  let d = {}; try { d = await r.json(); } catch (e) {}
+  if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
+  return d;
+}
+const staffOf = k => (S && S.staff.find(s => s.key === k)) || { key: k, name: k, role: '' };
+const boardStatus = k => { const s = BOARD && BOARD.staff && BOARD.staff[k]; return s && s.status || 'idle'; };
+function liveStatus(k) { const ch = S && S.channels[k]; return ch && ch.running ? 'working' : boardStatus(k); }
+
+// ---------- 輪詢 ----------
+async function poll() {
+  try {
+    const d = await api('/api/state?v=' + V);
+    if (serverDown) { serverDown = false; renderBanner(); }
+    if (!d.same) {
+      S = d; V = d.v; render();
+      const busy = !!(S.channels.beike && S.channels.beike.running);
+      if (tab === 'prog' && (busy !== BEIKE_BUSY || (S.plan_mtime && S.plan_mtime !== PLAN_MT))) showProg();
+      BEIKE_BUSY = busy; PLAN_MT = S.plan_mtime;
+    }
+  } catch (e) {
+    if (!serverDown) { serverDown = true; renderBanner(); }
+  }
+  setTimeout(poll, 1200);
+}
+async function pollBoard() {
+  try {
+    const t = await (await fetch('/辦公室狀態.js?t=' + Date.now())).text();
+    const body = t.slice(t.indexOf('=') + 1).trim().replace(/;\s*$/, '');
+    BOARD = JSON.parse(body);
+    if (office) office.update(BOARD);
+    renderLog(); renderTabs();
+  } catch (e) {}
+  setTimeout(pollBoard, 3000);
+}
+
+// ---------- 畫面 ----------
+function renderBanner() {
+  const b = [];
+  if (location.protocol === 'file:') b.push('<span class="err">請不要直接點開這個檔案。</span>請執行資料夾裡的 <b>開辦公室.bat</b>，它會自動打開正確的網頁。');
+  else if (serverDown) b.push('<span class="err">指令台沒有開著。</span>請執行 <b>開辦公室.bat</b>（黑色視窗不要關）。');
+  if (S && !S.claude_ok) b.push('<span class="err">這台電腦找不到 Claude Code。</span>請照 <b>開始使用.md</b> 第 1 步安裝並登入，再重開辦公室。');
+  if (S && !S.docx_ok) b.push('Word 排版工具還沒裝好（python-docx），重開 開辦公室.bat 會自動安裝。');
+  $('#banner').innerHTML = b.join('<br>');
+}
+function renderLog() {
+  const lg = (BOARD && BOARD.log || []).slice(0, 6);
+  const name = w => w === 'teacher' ? '老師' : staffOf(w).name;
+  $('#log').innerHTML = lg.map(x => `<div><span class="t">${esc((x.time || '').slice(11))}</span><b>${esc(name(x.who))}</b>　${esc(x.text)}</div>`).join('');
+}
+function renderTabs() {
+  if (!S) return;
+  $('#tabs').innerHTML = S.staff.map(s => {
+    const st = liveStatus(s.key), b = BOARD && BOARD.staff && BOARD.staff[s.key];
+    const txt = st === 'working' ? '工作中' : (b && b.task ? b.task.replace(/^(完成|待確認)：/, '') : STATUS_TEXT[st]);
+    return `<button class="stab ${tab === 'chat' && cur === s.key ? 'on' : ''}" style="--c:var(--${s.key})" data-k="${s.key}">
+      <div class="bar"></div><span class="nm">${esc(s.name)}</span><span class="rl">${esc(s.role)}</span>
+      <div class="st"><i class="dot ${st}"></i><span>${esc(txt)}</span></div></button>`;
+  }).join('') + `<button class="stab ftab ${tab === 'prog' ? 'on' : ''}" data-k="__prog"><span class="ic">📅</span>進度</button>`
+    + `<button class="stab ftab ${tab === 'files' ? 'on' : ''}" data-k="__files"><span class="ic">🗂</span>檔案</button>`
+    + `<button class="closeBtn" id="closeChat" title="收起對話視窗，只看 3D 辦公室">✕</button>`;
+  $('#tabs').style.setProperty('--nstaff', S.staff.length);
+  $('#tabs').querySelectorAll('.stab').forEach(b => b.onclick = () => b.dataset.k === '__files' ? showFiles() : b.dataset.k === '__prog' ? showProg() : choose(b.dataset.k));
+  $('#closeChat').onclick = () => setChatOpen(false);
+}
+function choose(k) {
+  if (!S || !S.channels[k]) return;
+  drafts[cur] = $('#input').value;
+  cur = k; tab = 'chat';
+  try { localStorage.setItem('office.cur', k); } catch (e) {}
+  $('#input').value = drafts[k] || '';
+  $('#chat').hidden = false; $('#files').hidden = true; $('#prog').hidden = true;
+  lastRenderKey = ''; render();
+  if (office) office.select(k);
+}
+function render() {
+  if (!S) return;
+  renderBanner(); renderTabs();
+  if (!S.channels[cur]) cur = S.staff[0].key;
+  const ch = S.channels[cur], me = staffOf(cur);
+  document.documentElement.style.setProperty('--c', `var(--${cur})`);
+  // 對話分頁
+  $('#convBar').innerHTML = ch.convs.slice().reverse().map(c =>
+    `<div class="conv ${c.id === ch.active ? 'on' : ''}" data-id="${c.id}" title="${esc(c.created)}"><span>${esc(c.title)}</span>${c.id === ch.active ? '' : '<button class="x" title="刪除這段對話">✕</button>'}</div>`
+  ).join('') + `<button class="newc" id="newConv">＋ 新對話</button>`;
+  $('#convBar').querySelectorAll('.conv').forEach(el => {
+    el.onclick = async e => {
+      if (e.target.classList.contains('x')) {
+        const x = e.target;
+        if (!x.classList.contains('arm')) { x.classList.add('arm'); x.textContent = '刪除？'; setTimeout(() => { x.classList.remove('arm'); x.textContent = '✕'; }, 3000); return; }
+        try { await api('/api/delconv', { staff: cur, id: el.dataset.id }); } catch (err) { toast(err.message); }
+        return;
+      }
+      if (el.dataset.id === ch.active) return;
+      try { await api('/api/switch', { staff: cur, id: el.dataset.id }); } catch (err) { toast(err.message); }
+    };
+  });
+  $('#newConv').onclick = async () => { try { await api('/api/new', { staff: cur }); $('#modelHint').hidden = true; } catch (e) { toast(e.message); } };
+  // 模型
+  const sel = $('#model');
+  sel.innerHTML = S.models.map(m => `<option value="${m.id}" ${m.id === ch.model ? 'selected' : ''}>${esc(m.label)}</option>`).join('');
+  // 訊息
+  const key = cur + ':' + ch.active + ':' + ch.events.length + ':' + ch.running + ':' + JSON.stringify(handled).length;
+  if (key !== lastRenderKey) {
+    lastRenderKey = key;
+    const box = $('#msgs'), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    box.innerHTML = ch.events.length ? ch.events.map((e, i) => renderEvent(e, i, me, ch.active)).join('') :
+      `<div class="empty">這是和 <b>${esc(me.name)}</b>（${esc(me.role)}）的新對話。<br>直接打字交代工作，或點下面的範例。<br><span style="font-size:12px">換一件不相關的工作時，按上面的「＋ 新對話」比較省額度。</span></div>`;
+    if (ch.running) box.insertAdjacentHTML('beforeend', `<div class="busy"><i></i><i></i><i></i>${esc(me.name)}工作中……</div>`);
+    if (atBottom || ch.events.length < 3) box.scrollTop = box.scrollHeight;
+    bindMsgs();
+  }
+  $('#send').disabled = ch.running; $('#stop').hidden = !ch.running;
+  const cw = $('#contWrap'), cb = $('#cont'), lastTs = ch.events.length ? (ch.events[ch.events.length - 1].ts || 0) : 0;
+  cw.hidden = !ch.events.length;
+  const autoCont = ch.events.length && (Date.now() / 1000 - lastTs) < 10 * 60 && ch.context < S.long_context;
+  cb.checked = contChoice[cur + ':' + ch.active] ?? !!autoCont;
+  cw.classList.toggle('on', cb.checked);
+  cw.lastChild.textContent = cb.checked ? ' 接著這段聊' : ' 接著這段聊（不勾＝自動開新對話）';
+  $('#chips').innerHTML = (CHIPS[cur] || []).map(c => `<button class="chip">${esc(c)}</button>`).join('');
+  $('#chips').querySelectorAll('.chip').forEach(b => b.onclick = () => { const t = $('#input'); t.value = t.value.trim() ? t.value + '\n' + b.textContent : b.textContent; t.focus(); });
+  const w = $('#ctxWarn');
+  if (ch.context > S.long_context) { w.hidden = false; w.textContent = `這段對話已經很長（約 ${Math.round(ch.context / 10000)} 萬 token）。下一句建議不要勾「接著這段聊」，讓辦公室自動開新對話。`; }
+  else w.hidden = true;
+}
+function fmtText(t) {
+  let h = esc(t);
+  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+  h = h.replace(PATH_RE, m => `<span class="path" data-p="${m}">${m}</span>`);
+  h = h.replace(/^【完成】(.*)$/gm, '<span class="tagline ok">✓ $1</span>')
+       .replace(/^【待確認】(.*)$/gm, '<span class="tagline wait">？ $1</span>')
+       .replace(/^【交接】(.*)$/gm, '<span class="tagline hand">→ 交接 $1</span>');
+  return h.replace(/\n/g, '<br>');
+}
+function renderEvent(e, i, me, convId) {
+  switch (e.k) {
+    case 'me': return `<div class="m me"><div class="b">${fmtText(e.text)}</div></div>`;
+    case 'text': return `<div class="m text"><div class="who">${esc(me.name)}・${esc(e.time)}</div><div class="b">${fmtText(e.text)}</div></div>`;
+    case 'tool': return `<div class="m tool">${fmtText(e.text)}</div>`;
+    case 'sys': return `<div class="m sys">${fmtText(e.text)}</div>`;
+    case 'error': return `<div class="m error">${fmtText(e.text)}</div>`;
+    case 'done': return `<div class="m done">做完了・${esc(e.text)}</div>`;
+    case 'handoff': {
+      const to = staffOf(e.to), hk = cur + ':' + convId + ':' + i, done = handled[hk];
+      return `<div class="m handoff" style="--hc:var(--${e.to})"><div class="hd">${esc(me.name)} 想交接給 <b>${esc(to.name)}</b>（${esc(to.role)}）</div>${fmtText(e.text)}
+        <div class="acts">${done ? `<span style="font-size:12px;color:var(--muted)">${done === 'sent' ? '✓ 已交給' + esc(to.name) : '已略過'}</span>` :
+        `<button class="btn pri sm" style="background:var(--${e.to})" data-hand="${hk}" data-to="${e.to}" data-i="${i}">交給${esc(to.name)}</button><button class="btn ghost sm" data-skip="${hk}">先不要</button>`}</div></div>`;
+    }
+  }
+  return '';
+}
+function bindMsgs() {
+  const box = $('#msgs');
+  box.querySelectorAll('[data-hand]').forEach(b => b.onclick = async () => {
+    const ch = S.channels[cur], ev = ch.events[+b.dataset.i], me = staffOf(cur), to = b.dataset.to;
+    const text = `${me.name}（${me.role}）交接：${ev.text}`;
+    try {
+      await api('/api/send', { staff: to, text, fresh: true, title: `${me.name}交接` });
+      handled[b.dataset.hand] = 'sent'; saveHandled(); toast(`已交給${staffOf(to).name}`); choose(to);
+    } catch (e) { toast(e.message); }
+  });
+  box.querySelectorAll('[data-skip]').forEach(b => b.onclick = () => { handled[b.dataset.skip] = 'skip'; saveHandled(); lastRenderKey = ''; render(); });
+  box.querySelectorAll('.path').forEach(p => p.onclick = e => showPop(e, p.dataset.p));
+}
+function saveHandled() { try { localStorage.setItem('office.handled', JSON.stringify(handled)); } catch (e) {} }
+
+// ---------- 檔案動作 ----------
+function showPop(e, path) {
+  const pop = $('#pop'); e.stopPropagation();
+  const isMd = path.endsWith('.md');
+  pop.innerHTML = `<div class="pt">${esc(path)}</div>
+    <button class="btn ghost sm" data-a="open">打開</button>
+    <button class="btn ghost sm" data-a="reveal">在資料夾裡顯示</button>
+    ${isMd ? '<button class="btn ghost sm" data-a="docx">轉成 Word</button>' : ''}
+    <button class="btn ghost sm" data-a="insert">貼到指令框</button>`;
+  pop.style.display = 'flex';
+  const r = pop.getBoundingClientRect();
+  pop.style.left = Math.min(e.clientX, innerWidth - r.width - 10) + 'px';
+  pop.style.top = Math.min(e.clientY + 8, innerHeight - r.height - 10) + 'px';
+  pop.querySelectorAll('button').forEach(b => b.onclick = () => { pop.style.display = 'none'; fileAction(b.dataset.a, path); });
+}
+document.addEventListener('click', e => { if (!e.target.closest('#pop')) $('#pop').style.display = 'none'; });
+async function fileAction(a, path) {
+  try {
+    if (a === 'open' || a === 'reveal') { await api('/api/' + a, { path }); toast(a === 'open' ? '已打開' : '已在檔案總管顯示'); }
+    else if (a === 'docx' || a === 'pdf') {
+      toast(a === 'pdf' ? '轉成 PDF 中……' : '轉成 Word 和 PDF 中……', 40000);
+      const d = await api('/api/' + a, { path });
+      $('#toast').classList.remove('show');
+      modal(`<h3 style="margin:0 0 8px">${d.ok ? '轉好了' : '轉檔有問題'}</h3><pre>${fmtText(d.output || '')}</pre>`);
+      $('#modalBody').querySelectorAll('.path').forEach(p => p.onclick = e => showPop(e, p.dataset.p));
+      if (tab === 'files') showFiles();
+    } else if (a === 'insert') {
+      if (tab !== 'chat') choose(cur);
+      const t = $('#input'); t.value = (t.value ? t.value.trimEnd() + ' ' : '') + path; t.focus();
+    }
+  } catch (e) { toast(e.message); }
+}
+async function showFiles() {
+  tab = 'files'; renderTabs();
+  $('#chat').hidden = true; $('#prog').hidden = true; const f = $('#files'); f.hidden = false;
+  if (office) office.select(null);
+  let d; try { d = await api('/api/files'); } catch (e) { f.innerHTML = `<p class="fnote">${esc(e.message)}</p>`; return; }
+  const ago = t => { const s = (Date.now() / 1000 - t); return s < 3600 ? Math.max(1, Math.round(s / 60)) + ' 分鐘前' : s < 86400 ? Math.round(s / 3600) + ' 小時前' : new Date(t * 1000).toLocaleDateString('zh-TW'); };
+  f.innerHTML = `<p class="fnote">滑過檔案會出現按鈕。「轉 Word＋PDF」會把題目原稿排成可以印的考卷和答案卷（Word 檔和 PDF 各一份），放到 成品/。Word 檔旁邊的「轉 PDF」可以把你自己改過的 Word 檔重新轉成 PDF。<br>要給員工看的東西，丟進 <b>收件匣</b> 資料夾就好。</p>` +
+    d.groups.map(g => `<h3>${esc(g.name)} <small>${g.files.length ? g.files.length + ' 個檔' : '空的'}</small>
+      <button class="btn ghost sm" style="margin-left:auto" data-reveal="${esc(g.name)}">打開資料夾</button></h3>` +
+      g.files.map(x => `<div class="frow"><span class="fn" title="${esc(x.path)}">${esc(x.path.split('/').slice(1).join('/'))}</span><span class="ft">${ago(x.mtime)}</span>
+        <span class="fa"><button class="btn ghost sm" data-a="open" data-p="${esc(x.path)}">打開</button>
+        ${x.path.endsWith('.md') && !x.path.startsWith('收件匣') ? `<button class="btn ghost sm" data-a="docx" data-p="${esc(x.path)}">轉 Word＋PDF</button>` : ''}
+        ${x.path.toLowerCase().endsWith('.docx') ? `<button class="btn ghost sm" data-a="pdf" data-p="${esc(x.path)}">轉 PDF</button>` : ''}
+        <button class="btn ghost sm" data-a="insert" data-p="${esc(x.path)}">給${esc(staffOf(cur).name)}</button></span></div>`).join('')).join('');
+  f.querySelectorAll('[data-a]').forEach(b => b.onclick = () => fileAction(b.dataset.a, b.dataset.p));
+  f.querySelectorAll('[data-reveal]').forEach(b => b.onclick = async () => {
+    const g = d.groups.find(x => x.name === b.dataset.reveal);
+    const p = g && g.files[0] ? g.files[0].path : null;
+    if (!p) return toast('這個資料夾還是空的');
+    fileAction('reveal', p);
+  });
+}
+
+// ---------- 送出 ----------
+async function send() {
+  const t = $('#input'); let text = t.value.trim();
+  const ready = atts.filter(a => a.path);
+  if (atts.some(a => !a.path && !a.err)) return toast('附件還在上傳，等一下再送出');
+  if (!text && !ready.length) return;
+  if (!text) text = '請看附件。';
+  if (ready.length) text += '\n\n【附件】\n' + ready.map(a => '- ' + a.path).join('\n');
+  $('#send').disabled = true;
+  const ch0 = S.channels[cur], fresh = ch0.events.length > 0 && !$('#cont').checked;
+  try { await api('/api/send', { staff: cur, text, fresh }); t.value = ''; drafts[cur] = ''; atts = []; renderAtts(); $('#modelHint').hidden = true; }
+  catch (e) { toast(e.message); $('#send').disabled = false; }
+}
+$('#send').onclick = send;
+
+// ---------- 附件 ----------
+let atts = [];
+const contChoice = {};
+$('#cont').onchange = e => { const ch = S.channels[cur]; contChoice[cur + ':' + ch.active] = e.target.checked; lastRenderKey = ''; render(); };
+function renderAtts() {
+  $('#atts').innerHTML = atts.map((a, i) => `<span class="att ${a.path ? '' : 'up'}" title="${esc(a.path || a.name)}"><span>${a.err ? '⚠ ' : a.path ? '📄 ' : '⏳ '}${esc(a.name)}</span><button data-i="${i}" title="拿掉">✕</button></span>`).join('');
+  $('#atts').querySelectorAll('button').forEach(b => b.onclick = () => { atts.splice(+b.dataset.i, 1); renderAtts(); });
+}
+async function uploadFiles(files) {
+  for (const f of files) {
+    const a = { name: f.name || ('截圖_' + new Date().toTimeString().slice(0, 8).replace(/:/g, '') + '.png') };
+    atts.push(a); renderAtts();
+    try {
+      const r = await fetch('/api/upload?name=' + encodeURIComponent(a.name), { method: 'POST', body: f });
+      const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
+      a.path = d.path;
+    } catch (e) { a.err = true; toast('「' + a.name + '」上傳失敗：' + e.message); }
+    renderAtts();
+  }
+}
+$('#clip').onclick = () => $('#fileIn').click();
+$('#fileIn').onchange = e => { uploadFiles([...e.target.files]); e.target.value = ''; };
+const chatEl = $('#chat');
+chatEl.addEventListener('dragover', e => { e.preventDefault(); chatEl.classList.add('dropping'); });
+chatEl.addEventListener('dragleave', e => { if (!chatEl.contains(e.relatedTarget)) chatEl.classList.remove('dropping'); });
+chatEl.addEventListener('drop', e => { e.preventDefault(); chatEl.classList.remove('dropping'); if (e.dataTransfer.files.length) uploadFiles([...e.dataTransfer.files]); });
+$('#input').addEventListener('paste', e => {
+  const fs = [...(e.clipboardData && e.clipboardData.files || [])];
+  if (fs.length) { e.preventDefault(); uploadFiles(fs); }
+});
+
+// ---------- 每日回報各班進度 ----------
+const LESSONS = {
+  '五': ['五上 3-1', '五上 3-2', '五上 4-1', '五上 4-2', '五上 4-3', '五上 第5單元'],
+  '六': ['六上 3-1', '六上 3-2', '六上 3-3', '六上 4-1', '六上 4-2', '六上 第5單元'],
+};
+const EXTRA = ['寫學習單', '總複習測驗', '考卷檢討訂正', '機動', '停課'];
+let PLAN = null, PDATE = null, POPEN = {}, PEDIT = null, RDRAFT = {}, PLAN_MT = null, BEIKE_BUSY = false;
+const WD = '日一二三四五六';
+const mdw = iso => { if (!iso) return ''; const d = new Date(iso + 'T00:00'); return `${d.getMonth() + 1}/${d.getDate()}（${WD[d.getDay()]}）`; };
+async function showProg() {
+  tab = 'prog'; renderTabs();
+  $('#chat').hidden = true; $('#files').hidden = true; const box = $('#prog'); box.hidden = false;
+  if (office) office.select(null);
+  let r; try { r = await api('/api/plan'); } catch (e) { box.innerHTML = `<p class="fnote">${esc(e.message)}</p>`; return; }
+  if (!r.plan) return showProgFree();
+  PLAN = r.plan; if (!PDATE) PDATE = r.today;
+  renderPlan();
+}
+function planStat(c) {
+  const ss = c.sessions, done = ss.filter(x => x.done).length;
+  const late = ss.filter(x => !x.done && x.date && x.date < PDATE);
+  const ahead = ss.filter(x => x.done && x.date && x.date > PDATE).length;
+  return { done, late, ahead, total: ss.length };
+}
+function sesRow(cls, x, extra = '') {
+  const editing = PEDIT === cls + '|' + x.id;
+  const hw = [x.workbook, x.homework].filter(Boolean).join('／');
+  let h = `<div class="ses ${x.done ? 'done' : ''} ${extra}">
+    <input type="checkbox" data-cls="${esc(cls)}" data-id="${esc(x.id)}" ${x.done ? 'checked' : ''} title="上完了就打勾">
+    <div><span class="sm">第${x.n}堂・${esc(mdw(x.date))}${esc(x.period || '')}</span><br><span class="ct">${esc(x.content)}</span>
+      ${hw ? `<br><span class="sm">📝 ${esc(hw)}</span>` : ''}${x.note ? `<br><span class="sm" style="color:#8a5a00">✎ ${esc(x.note)}</span>` : ''}</div>
+    <div style="text-align:right">${x.done && x.doneDate ? `<div class="dd">✓ ${esc(mdw(x.doneDate))}</div>` : ''}<button class="ed" data-ed="${esc(cls)}|${esc(x.id)}" title="修改這一堂">✏</button></div>`;
+  if (editing) h += `<div class="edbox" data-box="${esc(cls)}|${esc(x.id)}">
+      <textarea rows="3" data-f="content">${esc(x.content)}</textarea>
+      <div class="r">日期 <input type="date" data-f="date" value="${esc(x.date)}"> 節次 <input data-f="period" value="${esc(x.period || '')}" style="width:80px"></div>
+      <div class="r"><input data-f="workbook" value="${esc(x.workbook || '')}" placeholder="課堂習作" style="flex:1"><input data-f="homework" value="${esc(x.homework || '')}" placeholder="回家作業" style="flex:1"></div>
+      <input data-f="note" value="${esc(x.note || '')}" placeholder="備註（例如：只上到 p.58、作業延後派）">
+      <div class="r"><button class="btn pri sm" data-save="${esc(cls)}|${esc(x.id)}" style="background:#8e6bbf">儲存</button><button class="btn ghost sm" data-cancel>取消</button></div></div>`;
+  return h + `</div>`;
+}
+function renderPlan() {
+  const box = $('#prog'), keep = box.scrollTop;
+  box.querySelectorAll('[data-r]').forEach(i => { RDRAFT[PDATE + '|' + i.dataset.r] = i.value; });
+  const order = Object.keys(PLAN.classes).sort();
+  const busy = S && S.channels.beike && S.channels.beike.running;
+  let h = `<div class="ptop"><b style="font-size:16px">回報今天上到哪</b><input type="date" id="pDate" value="${PDATE}"><span class="fnote">星期${WD[new Date(PDATE + 'T00:00').getDay()]}</span>
+    <button class="btn ghost sm" id="pTable" style="margin-left:auto">📊 看完整進度表</button><button class="btn ghost sm" id="pToday">回到今天</button></div>
+    ${busy ? `<div class="working"><span class="busy" style="padding:0"><i></i><i></i><i></i></span>芋圓正在幫你打勾、調整進度……做完這裡會自動更新。<button class="btn ghost sm" id="pWatch" style="margin-left:auto">看芋圓的回覆</button></div>` : ''}
+    <div class="rbox"><p class="fnote" style="margin:0 0 6px">有上課的班寫一句就好，例如「照預定」「只上到 p.60」「多上了 3-2 開頭」「沒上，改考小考」。沒上課的班空著。<br><b>「照預定」的班辦公室直接打勾，不花額度</b>；其他狀況才交給芋圓打勾、往後調整（要砍課文或動到期末複習考才會先問你）。</p>`;
+  for (const cls of order) {
+    const c = PLAN.classes[cls], todays = c.sessions.filter(x => x.date === PDATE);
+    const planTxt = todays.length ? '今天預定：' + todays.map(x => `第${x.n}堂 ${x.content.replace(/（[^）]*）/g, '').slice(0, 26)}`).join('；') : '今天沒排課';
+    const v = RDRAFT[PDATE + '|' + cls] || '';
+    h += `<div class="rrow ${todays.length ? '' : 'off'}"><span class="cl" style="background:${c.grade === '六' ? '#c8e6c9' : '#ffe0b2'}">${esc(cls)}</span>
+      <input data-r="${esc(cls)}" value="${esc(v)}" placeholder="${todays.length ? '上到哪？' : '（今天沒排課，有上再寫）'}">
+      ${todays.length ? `<button class="btn ghost sm" data-same="${esc(cls)}">照預定</button>` : '<span></span>'}
+      <div class="plan">${esc(planTxt)}</div></div>`;
+  }
+  h += `<textarea id="rOther" placeholder="其他要讓芋圓知道的（例如：604 下週一要去校外教學、511 想多一節複習）">${esc(RDRAFT[PDATE + '|__other'] || '')}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn pri" id="rSend" style="background:#8e6bbf" ${busy ? 'disabled' : ''}>回報給芋圓（自動打勾＋調整）</button></div></div>
+    <h3 style="margin:18px 0 0">各班進度 <span class="fnote" style="font-weight:400">芋圓會幫你勾，你也可以自己勾</span></h3>`;
+  const lateList = [];
+  for (const cls of order) {
+    const c = PLAN.classes[cls], st = planStat(c);
+    const today = c.sessions.filter(x => x.date === PDATE);
+    const late = st.late.filter(x => x.date !== PDATE);
+    const next = c.sessions.find(x => !x.done && x.date > PDATE);
+    if (st.late.length) lateList.push(`${cls} 落後 ${st.late.length} 堂`);
+    const chip = st.late.length ? `<span class="chip2 late">落後 ${st.late.length} 堂</span>` : st.ahead ? `<span class="chip2 ahead">超前 ${st.ahead} 堂</span>` : `<span class="chip2 ok">進度正常</span>`;
+    h += `<div class="pcard ${today.length ? 'today' : ''}"><div class="phead">
+      <span class="cl" style="background:${c.grade === '六' ? '#c8e6c9' : '#ffe0b2'}">${esc(cls)}</span>
+      <span class="meta">${c.grade}上・${esc(c.slots || '')}・已上 ${st.done}/${st.total} 堂</span>${chip}</div>
+      <div class="bar2"><i style="width:${Math.round(st.done / Math.max(1, st.total) * 100)}%"></i></div>`;
+    if (today.length) h += `<div class="sub">今天的課</div>` + today.map(x => sesRow(cls, x)).join('');
+    else h += `<div class="sub" style="font-weight:400">今天（${esc(mdw(PDATE))}）這班沒有排課</div>`;
+    if (late.length) h += `<div class="sub warn">⚠ 之前還沒打勾的</div>` + late.map(x => sesRow(cls, x, 'late')).join('');
+    if (next && !today.includes(next)) h += `<div class="sub">下一堂</div>` + sesRow(cls, next);
+    if (POPEN[cls]) h += `<div class="sub">全部 ${st.total} 堂</div>` + c.sessions.map(x => sesRow(cls, x, (!x.done && x.date < PDATE) ? 'late' : '')).join('');
+    h += `<button class="more" data-more="${esc(cls)}">${POPEN[cls] ? '▴ 收起' : `▾ 看全部 ${st.total} 堂`}</button>
+</div>`;
+  }
+  h += `<div class="pbar"><button class="btn ghost" id="pAsk">請芋圓重新檢查整體進度</button><button class="btn ghost" id="pXls">匯出成 Excel</button></div>
+    <p class="fnote">進度清單：教學進度/進度計畫.json（從你的 Excel 匯入）。匯出的 Excel 會多兩欄「完成」「老師備註」，沒上的標「未上」。</p>`;
+  box.innerHTML = h; box.scrollTop = keep;
+  $('#pDate').onchange = e => { PDATE = e.target.value; renderPlan(); };
+  $('#pToday').onclick = async () => { const r = await api('/api/plan'); PDATE = r.today; renderPlan(); };
+  $('#pTable').onclick = () => showPlanTable();
+  box.querySelectorAll('.ses input[type=checkbox]').forEach(cb => cb.onchange = async () => {
+    try {
+      const r = await api('/api/plan/check', { cls: cb.dataset.cls, id: cb.dataset.id, done: cb.checked, date: PDATE });
+      const ss = PLAN.classes[cb.dataset.cls].sessions, i = ss.findIndex(x => x.id === cb.dataset.id); ss[i] = r.session; renderPlan();
+    } catch (e) { toast(e.message); cb.checked = !cb.checked; }
+  });
+  box.querySelectorAll('[data-more]').forEach(b => b.onclick = () => { POPEN[b.dataset.more] = !POPEN[b.dataset.more]; renderPlan(); });
+  box.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { PEDIT = PEDIT === b.dataset.ed ? null : b.dataset.ed; renderPlan(); });
+  box.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => { PEDIT = null; renderPlan(); });
+  box.querySelectorAll('[data-save]').forEach(b => b.onclick = async () => {
+    const [cls, id] = b.dataset.save.split('|'), eb = box.querySelector(`[data-box="${CSS.escape(b.dataset.save)}"]`), body = { cls, id };
+    eb.querySelectorAll('[data-f]').forEach(i => body[i.dataset.f] = i.value);
+    if (body.date) body.wd = WD[new Date(body.date + 'T00:00').getDay()];
+    try { const r = await api('/api/plan/edit', body); const ss = PLAN.classes[cls].sessions; ss[ss.findIndex(x => x.id === id)] = r.session; PEDIT = null; renderPlan(); toast('已修改'); }
+    catch (e) { toast(e.message); }
+  });
+  box.querySelectorAll('[data-r]').forEach(i => i.oninput = () => { RDRAFT[PDATE + '|' + i.dataset.r] = i.value; });
+  $('#rOther').oninput = e => { RDRAFT[PDATE + '|__other'] = e.target.value; };
+  box.querySelectorAll('[data-same]').forEach(b => b.onclick = () => { const i = box.querySelector(`[data-r="${b.dataset.same}"]`); i.value = '照預定上完'; RDRAFT[PDATE + '|' + b.dataset.same] = i.value; });
+  if ($('#pWatch')) $('#pWatch').onclick = () => choose('beike');
+  $('#rSend').onclick = async () => {
+    const entries = order.map(cls => ({ cls, text: (box.querySelector(`[data-r="${cls}"]`).value || '').trim(), note: '' })).filter(e => e.text);
+    const other = $('#rOther').value.trim();
+    if (!entries.length && !other) return toast('還沒有寫任何一班');
+    // 省額度：「照預定」的班由辦公室直接打勾，不用叫芋圓
+    const isSame = t => /^(照預定|照進度|如預定|ok|OK|完成|上完)(上完|完成|了)?[。！!]?$/.test(t.replace(/\s/g, ''));
+    let autoN = 0;
+    for (const e of entries.filter(e => isSame(e.text))) {
+      const c = PLAN.classes[e.cls], todays = c.sessions.filter(x => x.date === PDATE && !x.done);
+      for (const x of todays) { try { await api('/api/plan/check', { cls: e.cls, id: x.id, done: true, date: PDATE }); autoN++; } catch (err) {} }
+    }
+    const rest = entries.filter(e => !isSame(e.text));
+    if (entries.length) await api('/api/progress', { date: PDATE, entries });
+    if (!rest.length && !other) {
+      box.querySelectorAll('[data-r]').forEach(i => { i.value = ''; delete RDRAFT[PDATE + '|' + i.dataset.r]; });
+      toast(`已直接打勾 ${autoN} 堂（照預定的不用麻煩芋圓，不花額度）`); showProg(); return;
+    }
+    entries.length = 0; entries.push(...rest);
+    const d = new Date(PDATE + 'T00:00');
+    const lines = entries.map(e => {
+      const c = PLAN.classes[e.cls], todays = c.sessions.filter(x => x.date === PDATE);
+      const late = c.sessions.filter(x => !x.done && x.date && x.date < PDATE);
+      return `- ${e.cls}：${e.text}\n  今天預定：` + (todays.length ? todays.map(x => `${x.id}（第${x.n}堂）${x.content}`).join('；') : '沒排課') +
+        (late.length ? `\n  之前還沒打勾：` + late.map(x => `${x.id}（第${x.n}堂 ${x.date.slice(5)}）`).join('、') : '');
+    });
+    const text = `【每日進度回報】${PDATE}（${WD[d.getDay()]}）\n` + lines.join('\n') + (other ? `\n\n其他：${other}` : '') +
+      `\n\n請照你員工設定裡「每日回報：自動打勾和調整」的流程處理：用 plan_tool.py 的 tick／set 指令改（不要讀整個 進度計畫.json），指令盡量串成一次執行，最後跑 check，用一張短表告訴我各班勾了什麼、改了什麼。`;
+    try {
+      await api('/api/send', { staff: 'beike', text, fresh: true, title: PDATE ? PDATE.slice(5).replace('-', '/') + ' 進度' : '' });
+      box.querySelectorAll('[data-r]').forEach(i => { i.value = ''; delete RDRAFT[PDATE + '|' + i.dataset.r]; });
+      $('#rOther').value = ''; delete RDRAFT[PDATE + '|__other'];
+      toast('已交給芋圓，她會幫你打勾和調整');
+      setTimeout(showProg, 1500);
+    } catch (e) { toast(e.message); }
+  };
+  $('#pAsk').onclick = async () => {
+    const entries = [];
+    try {
+      const lines = order.map(cls => { const st = planStat(PLAN.classes[cls]); return `- ${cls}：已上 ${st.done}/${st.total}，` + (st.late.length ? `落後 ${st.late.length} 堂（${st.late.map(x => '第' + x.n + '堂').join('、')}）` : st.ahead ? `超前 ${st.ahead} 堂` : '進度正常'); });
+      const text = `今天是 ${PDATE}。各班進度打勾的情況：\n${lines.join('\n')}` +
+        (entries.filter(e => e.note).length ? `\n\n今天的備註：\n` + entries.filter(e => e.note).map(e => `- ${e.cls}：${e.note}`).join('\n') : '') +
+        `\n\n請幫我調整 教學進度/進度計畫.json：落後的班把還沒上的內容往後排、能併的併、優先用【機動】堂，期末複習考和檢討的位置不要動。照你員工設定裡「調整進度清單」的規則做，用 plan_tool.py 的 show／set 指令（不要讀整個 進度計畫.json），改完執行 check，再用一張短表跟我說每班改了什麼。`;
+      await api('/api/send', { staff: 'beike', text, fresh: true, title: PDATE ? PDATE.slice(5).replace('-', '/') + ' 進度' : '' }); toast('已交給芋圓'); choose('beike');
+    } catch (e) { toast(e.message); }
+  };
+  $('#pXls').onclick = async () => {
+    try { const r = await api('/api/plan/export', {}); if (!r.ok) return modal(`<pre>${esc(r.output)}</pre>`); toast('已匯出'); fileAction('open', r.path); }
+    catch (e) { toast(e.message); }
+  };
+}
+// ---------- 完整進度表（像 Excel 一樣看） ----------
+let XTAB = '總覽';
+async function showPlanTable(tabName) {
+  let r; try { r = await api('/api/plan'); } catch (e) { return toast(e.message); }
+  if (!r.plan) return toast('還沒有進度清單，請先把進度表 Excel 給芋圓或我匯入');
+  PLAN = r.plan; const today = r.today; if (tabName) XTAB = tabName;
+  const order = Object.keys(PLAN.classes).sort();
+  const md = iso => { if (!iso) return ''; const d = new Date(iso + 'T00:00'); return `${d.getMonth() + 1}/${d.getDate()}`; };
+  const kind = t => /★考|^考|複習考卷/.test(t) ? 'exam' : /機動/.test(t) ? 'flex' : '';
+  let h = `<div class="xhead"><h3>期中考後至期末考教學進度表</h3><span class="fnote">今天 ${md(today)}（${WD[new Date(today + 'T00:00').getDay()]}）・更新 ${esc((PLAN.updated || '').slice(5))}</span>
+    <span class="legend" style="margin-left:auto"><span style="background:#e2f0d9">已上</span><span style="background:#f8cbad">未上（落後）</span><span style="background:#fff2cc">考試</span><span style="background:#ddebf7">機動</span><span style="box-shadow:inset 0 0 0 2px #8e6bbf">今天</span></span>
+    <button class="btn ghost sm" id="xXls">匯出成 Excel</button><button class="btn ghost sm" id="xPrint">列印</button></div>
+    <div class="xtabs">${['總覽', ...order].map(t => `<button class="${t === XTAB ? 'on' : ''}" data-x="${esc(t)}">${esc(t)}</button>`).join('')}</div><div class="xwrap" id="xwrap">`;
+  if (XTAB === '總覽') {
+    h += `<table class="xl xsum"><tr><th>班級</th><th>上課時段</th><th>已上／總堂數</th><th>狀態</th><th>下一堂</th><th>期末複習考／檢討</th><th>備註</th></tr>` +
+      order.map(cls => {
+        const c = PLAN.classes[cls], ss = c.sessions, done = ss.filter(x => x.done).length;
+        const late = ss.filter(x => !x.done && x.date && x.date < today).length, ahead = ss.filter(x => x.done && x.date > today).length;
+        const next = ss.find(x => !x.done); const sum = (PLAN.summary && PLAN.summary.classes || []).find(x => x.cls === cls) || {};
+        return `<tr><td class="c"><a href="#" data-x="${esc(cls)}"><b>${esc(cls)}</b></a></td><td class="c">${esc(c.slots || '')}</td><td class="c">${done}／${ss.length}</td>
+          <td class="c ${late ? 'late' : 'ok'}">${late ? `落後 ${late} 堂` : ahead ? `超前 ${ahead} 堂` : '進度正常'}</td>
+          <td>${next ? `第${next.n}堂 ${md(next.date)}（${esc(next.wd)}）${esc(next.period)}<br>${esc(next.content)}` : '全部上完'}</td>
+          <td>${esc(sum.review || '')}</td><td>${esc(sum.remark || '')}</td></tr>`;
+      }).join('') + `</table>`;
+    const notes = (PLAN.summary && PLAN.summary.notes) || [];
+    if (notes.length) h += `<div style="padding:10px 12px;font-size:13px;line-height:1.7;background:#fff">${notes.map(n => esc(n)).join('<br>')}</div>`;
+  } else {
+    const c = PLAN.classes[XTAB];
+    h += `<div style="padding:8px 10px;background:#fff;font-weight:700">${esc(c.title || XTAB)}</div>
+      <table class="xl"><tr><th>週次</th><th>日期</th><th>星期</th><th>節次</th><th>堂數</th><th>課程內容（課本頁次）</th><th>課堂習作</th><th>回家作業（作業簿）</th><th style="min-width:76px">完成</th><th style="min-width:160px">備註</th></tr>` +
+      c.sessions.map(x => {
+        const late = !x.done && x.date && x.date < today, cls2 = [kind(x.content), x.done ? 'done' : late ? 'late' : '', x.date === today ? 'today' : ''].join(' ');
+        return `<tr class="${cls2}" ${x.date === today ? 'id="xToday"' : ''}><td class="c">${esc(x.week || '')}</td><td class="c">${md(x.date)}</td><td class="c">${esc(x.wd || '')}</td><td class="c">${esc(x.period || '')}</td>
+          <td class="c">${x.n}</td><td class="ct">${esc(x.content)}</td><td>${esc(x.workbook || '')}</td><td>${esc(x.homework || '')}</td>
+          <td class="c st">${x.done ? '✓ ' + md(x.doneDate) : late ? '未上' : ''}</td><td>${esc(x.note || '')}</td></tr>`;
+      }).join('') + (c.footer || []).map(([a, b]) => `<tr class="foot"><td class="c">${esc(a)}</td><td colspan="9">${esc(b)}</td></tr>`).join('') + `</table>`;
+  }
+  h += `</div>`;
+  modal(h); const bx = $('#modal .box'); bx.classList.remove('wide'); bx.classList.add('xlbox');
+  $('#modalBody').querySelectorAll('[data-x]').forEach(b => b.onclick = e => { e.preventDefault(); showPlanTable(b.dataset.x); });
+  $('#xXls').onclick = async () => { try { const r2 = await api('/api/plan/export', {}); if (!r2.ok) return toast(r2.output); fileAction('open', r2.path); } catch (e) { toast(e.message); } };
+  $('#xPrint').onclick = () => {
+    const w = window.open('', '_blank'); if (!w) return toast('瀏覽器擋住了彈出視窗');
+    w.document.write(`<html><head><meta charset="utf-8"><title>${esc(XTAB)} 進度表</title><style>${[...document.querySelectorAll('style')].map(x => x.textContent).join('')} body{background:#fff;padding:10px} .xwrap{max-height:none;overflow:visible}</style></head><body>${$('#xwrap').outerHTML}</body></html>`);
+    w.document.close(); setTimeout(() => w.print(), 300);
+  };
+  const t = document.getElementById('xToday'); if (t) t.scrollIntoView({ block: 'center' });
+}
+async function showProgFree() {
+  const box = $('#prog');
+  let d; try { d = await api('/api/progress'); } catch (e) { box.innerHTML = `<p class="fnote">${esc(e.message)}</p>`; return; }
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const md = s => s ? s.slice(5).replace('-', '/') : '';
+  let html = `<div class="ptop"><b style="font-size:16px">今天上到哪？</b><input type="date" id="pDate" value="${today}"><span id="pWd" class="fnote"></span></div>
+    <p class="fnote" style="margin:6px 0 0">只填今天有上的班就好，空白的不會存。「上到哪」可以寫課次和頁數，例如「3-1 P58–61」。</p>
+    <datalist id="dl五">${[...LESSONS['五'], ...EXTRA].map(x => `<option value="${x}">`).join('')}</datalist>
+    <datalist id="dl六">${[...LESSONS['六'], ...EXTRA].map(x => `<option value="${x}">`).join('')}</datalist>`;
+  Object.entries(d.classes).forEach(([grade, list]) => {
+    const g = grade.includes('六') ? '六' : '五';
+    html += `<h3>${esc(grade)}</h3>` + list.map(cl => {
+      const L = d.latest[cl];
+      return `<div class="prow"><span class="cl">${esc(cl)}</span>
+        <input data-cl="${esc(cl)}" data-f="text" list="dl${g}" placeholder="上到哪">
+        <input data-cl="${esc(cl)}" data-f="note" placeholder="備註（例如：作業沒交完、少一節）">
+        <span></span><div class="last">${L ? `上次 ${md(L.date)}：${esc(L.text || '')}${L.note ? '（' + esc(L.note) + '）' : ''}` : '還沒有回報過'}</div></div>`;
+    }).join('');
+  });
+  html += `<div class="pacts"><button class="btn pri" id="pSave" style="background:#8e6bbf">儲存</button>
+    <button class="btn ghost" id="pAsk">儲存並請芋圓對照進度表</button></div>`;
+  const hist = d.history.slice().reverse(), byDate = {};
+  hist.forEach(h => { (byDate[h.date] = byDate[h.date] || []).push(h); });
+  const days = Object.keys(byDate).slice(0, 10);
+  if (days.length) html += `<h3>最近的回報</h3>` + days.map(dt => `<div class="hist"><b>${md(dt)}</b>　${byDate[dt].map(h => `${esc(h.cls)} ${esc(h.text)}${h.note ? '（' + esc(h.note) + '）' : ''}`).join('、')}</div>`).join('');
+  html += `<p class="fnote" style="margin-top:14px">紀錄存在 教學進度/每日回報.md，芋圓排進度時會讀。黑板旁的「任教班級」海報會顯示每班最新進度。</p>`;
+  box.innerHTML = html;
+  const wd = () => { const v = $('#pDate').value; $('#pWd').textContent = v ? '星期' + '日一二三四五六'[new Date(v + 'T00:00').getDay()] : ''; };
+  wd(); $('#pDate').onchange = wd;
+  const inputs = [...box.querySelectorAll('.prow input')];
+  inputs.forEach((inp, i) => inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); (inputs[i + 1] || $('#pSave')).focus(); } }));
+  const collect = () => {
+    const m = {};
+    inputs.forEach(inp => { const c = inp.dataset.cl; (m[c] = m[c] || { cls: c, text: '', note: '' })[inp.dataset.f] = inp.value.trim(); });
+    return Object.values(m).filter(e => e.text || e.note);
+  };
+  const save = async () => {
+    const entries = collect();
+    if (!entries.length) { toast('還沒有填任何一班'); return null; }
+    const r = await api('/api/progress', { date: $('#pDate').value, entries });
+    toast(`已存 ${r.saved} 班的進度`); return entries;
+  };
+  $('#pSave').onclick = async () => { try { if (await save()) showProgFree(); } catch (e) { toast(e.message); } };
+  $('#pAsk').onclick = async () => {
+    try {
+      const entries = await save(); if (!entries) return;
+      const date = $('#pDate').value;
+      const text = `今天（${date}）各班進度回報：\n` + entries.map(e => `- ${e.cls}：${e.text}${e.note ? '（' + e.note + '）' : ''}`).join('\n') +
+        `\n\n請對照 教學進度/進度表.md（還有 教學進度/每日回報.md 之前的紀錄），告訴我哪幾班落後或超前、落後幾節，接下來怎麼調整才來得及在期末考（1/7–1/8）前上完。有需要就更新進度表。`;
+      await api('/api/send', { staff: 'beike', text, fresh: true, title: PDATE ? PDATE.slice(5).replace('-', '/') + ' 進度' : '' });
+      toast('已交給芋圓'); choose('beike');
+    } catch (e) { toast(e.message); }
+  };
+}
+$('#input').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+$('#stop').onclick = async () => { try { await api('/api/stop', { staff: cur }); toast('已叫他停下來'); } catch (e) { toast(e.message); } };
+$('#model').onchange = async e => {
+  try {
+    await api('/api/model', { staff: cur, model: e.target.value });
+    const ch = S.channels[cur];
+    if (ch.events.length) { const h = $('#modelHint'); h.hidden = false; h.innerHTML = '換了模型，這段對話要整段重新讀一次，比較耗額度。如果是要開始新工作，建議先按「＋ 新對話」。'; }
+  } catch (err) { toast(err.message); }
+};
+
+function tick() {
+  const d = new Date();
+  $('#clock').textContent = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}（${'日一二三四五六'[d.getDay()]}）${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+tick(); setInterval(tick, 10000);
+
+// ---------- 對話視窗寬度：拖曳分隔線、放大按鈕 ----------
+const panel = $('#panel'), split = $('#split');
+function setPW(px) {
+  if (px == null) { panel.style.removeProperty('width'); try { localStorage.removeItem('office.pw'); } catch (e) {} }
+  else { px = Math.max(380, Math.min(px, innerWidth - 260)); panel.style.width = px + 'px'; try { localStorage.setItem('office.pw', px); } catch (e) {} }
+  $('#bigBtn').textContent = panel.getBoundingClientRect().width > innerWidth * 0.62 ? '⤡ 對話縮回' : '⤢ 對話放大';
+}
+try { const pw = +localStorage.getItem('office.pw'); if (pw) setPW(pw); else setPW(null); } catch (e) { setPW(null); }
+split.addEventListener('pointerdown', e => {
+  e.preventDefault(); split.setPointerCapture(e.pointerId); split.classList.add('drag'); document.body.classList.add('dragging');
+  const move = ev => setPW(innerWidth - ev.clientX);
+  const up = () => { split.removeEventListener('pointermove', move); split.removeEventListener('pointerup', up); split.classList.remove('drag'); document.body.classList.remove('dragging'); };
+  split.addEventListener('pointermove', move); split.addEventListener('pointerup', up);
+});
+split.addEventListener('dblclick', () => setPW(null));
+$('#bigBtn').onclick = () => setPW(panel.getBoundingClientRect().width > innerWidth * 0.62 ? null : Math.round(innerWidth * 0.75));
+renderBanner(); poll(); pollBoard();
+window.__officeReady = o => { office = o; if (BOARD) o.update(BOARD); if (tab === 'chat') o.select(cur); };
+window.__officePick = k => {
+  if (k === '__board' || k === '__classes') return showBoard();
+  if (document.body.classList.contains('chatClosed')) setChatOpen(true); choose(k);
+};
+// ---------- 公佈欄（點黑板或「📋 公佈欄」打開） ----------
+function showBoard() {
+  const b = (BOARD && BOARD.board) || {}, rows = Array.isArray(b.progress) ? b.progress : [];
+  const cls = v => /完成|已排版|已審|考完/.test(v || '') ? 'ok' : /中|待/.test(v || '') ? 'mid' : '';
+  const nc = ['#fff27a', '#ffc6d9', '#bfe8ff', '#c8f2b8', '#ffd9a8'];
+  const classes = b.classes || { '五年級': ['508', '509', '511'], '六年級': ['602', '603', '604', '605'] }, cp = b.classProgress || {};
+  const d = new Date();
+  let h = `<div class="chalk"><h2>現在進度：${esc(b.current || '—')}</h2>
+    <div class="d">${d.getMonth() + 1} 月 ${d.getDate()} 日　星期${'日一二三四五六'[d.getDay()]}${BOARD && BOARD.updated ? '　（更新：' + esc(BOARD.updated.slice(5)) + '）' : ''}</div>
+    <table><tr><th>單元</th><th>備課</th><th>學習單</th><th>考卷</th></tr>` +
+    (rows.length ? rows.map(r => `<tr><td>${esc(r.unit)}</td>${['備課', '學習單', '考卷'].map(k => `<td class="${cls(r[k])}">${esc(r[k] || '·')}</td>`).join('')}</tr>`).join('')
+      : `<tr><td colspan="4" style="opacity:.6">還沒有進度</td></tr>`) + `</table></div>`;
+  h += `<h3 style="margin:16px 0 4px">各班進度</h3><div class="cprog">` + Object.entries(classes).flatMap(([g, list]) => list.map(c =>
+    `<span class="c" style="background:${g.includes('六') ? '#c8e6c9' : '#ffe0b2'}">${esc(c)}</span><span style="color:${cp[c] ? 'inherit' : '#aaa'}">${esc(cp[c] || '還沒回報')}</span>`)).join('') + `</div>`;
+  const notes = Array.isArray(b.notes) ? b.notes : [];
+  if (notes.length) h += `<h3 style="margin:16px 0 4px">便條</h3><div class="notes">` + notes.map((n, i) =>
+    `<div class="note" style="background:${nc[i % nc.length]};transform:rotate(${((i * 37) % 7 - 3) * 0.6}deg)">${esc(n)}</div>`).join('') + `</div>`;
+  h += `<div class="boardActs">
+    <button class="btn ghost sm" id="bTable">📊 看完整進度表</button>
+    <button class="btn ghost sm" data-open="教學進度/每日回報.md">打開每日回報紀錄</button>
+    <button class="btn ghost sm" id="bProg">📅 回報今天進度</button>
+    <button class="btn ghost sm" id="bAsk">請芋圓更新公佈欄</button></div>
+    <p class="fnote" style="margin-top:8px">想改黑板內容（加便條、改現在進度），跟任何一位員工說就好，例如「便條加一張：11/20 段考」。</p>`;
+  modal(h); $('#modal .box').classList.add('wide');
+  $('#modalBody').querySelectorAll('[data-open]').forEach(x => x.onclick = () => fileAction('open', x.dataset.open));
+  $('#bTable').onclick = () => showPlanTable();
+  $('#bProg').onclick = () => { $('#modalClose').click(); if (document.body.classList.contains('chatClosed')) setChatOpen(true); showProg(); };
+  $('#bAsk').onclick = () => { $('#modalClose').click(); if (document.body.classList.contains('chatClosed')) setChatOpen(true); choose('beike');
+    $('#input').value = '請對照 教學進度/每日回報.md 和各單元的檔案，更新公佈欄（辦公室狀態.js 的 board.progress、board.current、board.notes），讓它符合現在的實際進度。'; $('#input').focus(); };
+}
+$('#boardBtn').onclick = showBoard;
+function setChatOpen(open) {
+  document.body.classList.toggle('chatClosed', !open);
+  $('#openChat').hidden = open;
+  try { localStorage.setItem('office.chatClosed', open ? '' : '1'); } catch (e) {}
+}
+$('#openChat').onclick = () => setChatOpen(true);
+try { if (localStorage.getItem('office.chatClosed')) setChatOpen(false); } catch (e) {}
+</script>
+<script type="module">
+try {
+  const { createOffice } = await import('./office3d.js');
+  const o = createOffice(document.getElementById('three'), { onPick: k => window.__officePick(k) });
+  window.__officeReady(o);
+} catch (e) {
+  console.error(e);
+  const n = document.getElementById('nogl'); n.hidden = false;
+  n.innerHTML = '3D 辦公室畫面載入不了（這台電腦的瀏覽器可能不支援 3D）。<br>右邊的指令台照樣可以用。';
+}
+</script>
+</body>
+</html>

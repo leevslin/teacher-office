@@ -1,0 +1,19 @@
+# 教師辦公室：不要上傳到雲端（GitHub）的東西
+
+# 課本、習作、教師手冊 PDF 太大（GitHub 一個檔最多 100MB），留在電腦上就好
+佩穎數學檔案/**/*.pdf
+
+# 指令台的對話紀錄和即時狀態板（每幾秒就變，只在這台電腦用）
+tools/console_session.json
+tools/*.tmp
+辦公室狀態.js
+辦公室狀態.js.tmp
+
+# 暫存檔
+__pycache__/
+*.pyc
+~$*
+*.tmp
+.~lock*
+Thumbs.db
+desktop.ini
