@@ -12,6 +12,7 @@ plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei']
 plt.rcParams['axes.unicode_minus'] = False
 OUT = os.path.dirname(os.path.abspath(__file__))
 PRE = '數學四上期末_'
+NL = chr(10)
 
 
 # 注意：排版工具會把每張圖縮成約 9.8 公分寬（B4 雙欄的一欄），
@@ -124,9 +125,7 @@ def fig_lockers():
     rows, shown, cols = 4, 5, 6
     fig, ax = plt.subplots(figsize=(3.9, 2.9))
     for c in range(cols):
-        ax.text(c + 0.5, rows + 0.08, '第
-%d
-行' % (c + 1), ha='center', va='bottom', fontsize=15,
+        ax.text(c + 0.5, rows + 0.08, NL.join('第%d行' % (c + 1)), ha='center', va='bottom', fontsize=15,
                 linespacing=1.0)
         for r in range(rows):
             y = rows - 1 - r
@@ -144,31 +143,14 @@ def fig_lockers():
 # ---------- 6. 米花町地圖 ----------
 def fig_map():
     # 座標單位＝英吋，畫成印出來的大小（約 4 吋寬），字級 15.5 印出來約 14.5 pt。路程標在線的正中間（白底蓋住線）。
-    P = {'毛利偵探
-事務所': (0.4, 2.5), '帝丹
-小學': (0.4, 1.1), '米花
-公園': (2.45, 2.5),
-         '阿笠
-博士家': (2.0, 0.3), '米花
-美術館': (3.5, 1.3)}
-    E = [('帝丹
-小學', '米花
-公園', '1 km 280 m'),
-         ('米花
-公園', '米花
-美術館', '865 m'),
-         ('帝丹
-小學', '阿笠
-博士家', '940 m'),
-         ('阿笠
-博士家', '米花
-美術館', '1 km 370 m'),
-         ('毛利偵探
-事務所', '帝丹
-小學', '650 m'),
-         ('毛利偵探
-事務所', '米花
-公園', '1 km 90 m')]
+    P = {'毛利偵探|事務所': (0.4, 2.5), '帝丹|小學': (0.4, 1.1), '米花|公園': (2.45, 2.5),
+         '阿笠|博士家': (2.0, 0.3), '米花|美術館': (3.5, 1.3)}
+    E = [('帝丹|小學', '米花|公園', '1 km 280 m'),
+         ('米花|公園', '米花|美術館', '865 m'),
+         ('帝丹|小學', '阿笠|博士家', '940 m'),
+         ('阿笠|博士家', '米花|美術館', '1 km 370 m'),
+         ('毛利偵探|事務所', '帝丹|小學', '650 m'),
+         ('毛利偵探|事務所', '米花|公園', '1 km 90 m')]
     fig = plt.figure(figsize=(4.15, 3.05))
     ax = fig.add_axes([0, 0, 1, 1])
     for a, b, t in E:
@@ -177,7 +159,7 @@ def fig_map():
         ax.text((x1 + x2) / 2, (y1 + y2) / 2, t, ha='center', va='center', fontsize=15.5, zorder=3,
                 bbox=dict(fc='white', ec='none', pad=1.0))
     for name, (x, y) in P.items():
-        ax.text(x, y, name, ha='center', va='center', fontsize=15.5, zorder=4, linespacing=1.05,
+        ax.text(x, y, name.replace('|', NL), ha='center', va='center', fontsize=15.5, zorder=4, linespacing=1.05,
                 bbox=dict(boxstyle='round,pad=0.25', fc='white', ec='k', lw=1.3))
     ax.set_xlim(-0.15, 4.0); ax.set_ylim(-0.1, 2.95); ax.set_aspect('equal')
     axis_off(ax)

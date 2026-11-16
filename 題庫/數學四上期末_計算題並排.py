@@ -85,7 +85,32 @@ def process(path):
         print(f'{path.name} {start} 改成左右並排（格高 {height} 公分）')
     for start, end, h in BOXES:
         add_boxes(d, start, end, h)
+    min_font(d)
     d.save(path)
+
+
+MIN_PT = 14        # 老師規定：字最小 14 級
+FRAC_PT = 19       # Word 會把行內分數的分子分母縮小約 3/4，設 19 印出來約 14
+
+
+def min_font(d):
+    M = '{http://schemas.openxmlformats.org/officeDocument/2006/math}'
+    body = d.element.body
+    for sz in body.iter(qn('w:sz')):
+        if int(sz.get(qn('w:val'))) < MIN_PT * 2:
+            sz.set(qn('w:val'), str(MIN_PT * 2))
+    # 抬頭「班級 座號 姓名 得分」改成 14 級後放不下兩個字：標籤格加寬，從姓名格扣
+    t = d.tables[0]
+    if t.rows[0].cells[0].text == '班級':
+        widths = [Cm(w) for w in (1.7, 2.6, 1.7, 2.2, 1.7, 4.8, 1.7, 3.0)]
+        for c, w in zip(t.rows[0].cells, widths):
+            c.width = w
+        for g, w in zip(t._tbl.tblGrid.findall(qn('w:gridCol')), widths):
+            g.set(qn('w:w'), str(int(w.twips)))
+    for f in body.iter(M + 'f'):
+        for part in (M + 'num', M + 'den'):
+            for sz in f.find(part).iter(qn('w:sz')):
+                sz.set(qn('w:val'), str(FRAC_PT * 2))
 
 
 # 應用題：題目下面加「算式／答」書寫框（大題開頭, 下一大題開頭, 算式格高公分）
